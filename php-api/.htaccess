@@ -1,0 +1,13 @@
+RewriteEngine On
+
+# POST /api/auth/login
+RewriteRule ^auth/login$ login.php [L]
+
+# GET /api/matches/today
+RewriteRule ^matches/today$ matches.php [L,QSA]
+
+# GET /api/matches/{id}/odds
+RewriteRule ^matches/([0-9]+)/odds$ odds.php?id=$1 [L,QSA]
+
+# Health check
+RewriteRule ^health$ health.php [L]
