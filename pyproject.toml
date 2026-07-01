@@ -1,0 +1,50 @@
+[tool.poetry]
+name = "databet"
+version = "0.1.0"
+description = "Sistema de scraping de odds deportivas — Fase 1 (Fundación, stack MySQL)"
+authors = ["databet"]
+readme = "README.md"
+packages = [
+    { include = "config" },
+    { include = "models" },
+    { include = "normalizer" },
+    { include = "agents" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+# DB
+sqlalchemy = "^2.0"
+alembic = "^1.13"
+pymysql = "^1.1"
+cryptography = "^42.0"          # requerido por PyMySQL para auth moderna de MySQL 8 + cifrado de credenciales
+
+# Config
+pydantic = "^2.7"
+pydantic-settings = "^2.2"
+python-dotenv = "^1.0"
+
+# Pilot source (The Odds API)
+httpx = "^0.27"
+
+# Admin UI
+streamlit = "^1.35"
+
+# --- Diferidos a fases posteriores (anti-bot / escala) ---
+# playwright = "^1.44"
+# playwright-stealth = "^1.0"
+# celery = "^5.3"
+# redis = "^5.0"
+# fastapi = "^0.111"
+# uvicorn = "^0.30"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
