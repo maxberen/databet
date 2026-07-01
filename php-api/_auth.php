@@ -49,7 +49,7 @@ function rate_limit_ok(string $ip): void {
 }
 
 function require_auth(): string {
-    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
     if (!str_starts_with($header, 'Bearer ')) {
         json_out(401, ['detail' => 'Token requerido.']);
     }

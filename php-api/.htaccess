@@ -1,13 +1,8 @@
 RewriteEngine On
 
-# POST /api/auth/login
-RewriteRule ^auth/login$ login.php [L]
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-# GET /api/matches/today
-RewriteRule ^matches/today$ matches.php [L,QSA]
-
-# GET /api/matches/{id}/odds
-RewriteRule ^matches/([0-9]+)/odds$ odds.php?id=$1 [L,QSA]
-
-# Health check
-RewriteRule ^health$ health.php [L]
+RewriteRule ^api/auth/login$ login.php [L]
+RewriteRule ^api/matches/today$ matches.php [L,QSA]
+RewriteRule ^api/matches/([0-9]+)/odds$ odds.php?id=$1 [L,QSA]
+RewriteRule ^api/health$ health.php [L]
