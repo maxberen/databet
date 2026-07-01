@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { fetchMatchesToday, fetchMatchOdds } from "./api";
+import { fetchMatchesToday, fetchMatchOdds, apiLogout, isAuthenticated } from "./api";
+import Login from "./Login";
 import "./App.css";
 
 const SPORT_ICON = { football: "⚽", tennis: "🎾" };
@@ -133,7 +134,7 @@ function MatchRow({ match, onClick }) {
       </td>
       <td>
         <div className="competition">{match.competition}</div>
-        <div className="time muted">{dayjs(match.match_datetime).format("HH:mm")}</div>
+        <div className="time muted">{dayjs(match.match_datetime).format("DD/MM HH:mm")}</div>
       </td>
       <td className="teams">
         <div className="team">{match.home_team}</div>
@@ -161,28 +162,44 @@ function MatchRow({ match, onClick }) {
 }
 
 export default function App() {
+  const [authed, setAuthed] = useState(isAuthenticated());
   const [day, setDay] = useState(dayjs().format("YYYY-MM-DD"));
   const [selectedId, setSelectedId] = useState(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["matches", day],
     queryFn: () => fetchMatchesToday(day),
+    enabled: authed,
   });
 
   const football = data?.filter((m) => m.sport === "football") ?? [];
   const tennis = data?.filter((m) => m.sport === "tennis") ?? [];
+
+  function handleLogout() {
+    apiLogout();
+    setAuthed(false);
+  }
+
+  if (!authed) return <Login onSuccess={() => setAuthed(true)} />;
 
   return (
     <div className="app">
       <header className="header">
         <div className="header-inner">
           <div className="logo">⚡ databet</div>
-          <input
-            type="date"
-            className="date-picker"
-            value={day}
-            onChange={(e) => setDay(e.target.value)}
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div className="date-nav">
+              <button onClick={() => setDay(dayjs(day).subtract(1, "day").format("YYYY-MM-DD"))}>‹</button>
+              <input
+                type="date"
+                className="date-picker"
+                value={day}
+                onChange={(e) => setDay(e.target.value)}
+              />
+              <button onClick={() => setDay(dayjs(day).add(1, "day").format("YYYY-MM-DD"))}>›</button>
+            </div>
+            <button className="logout-btn" onClick={handleLogout}>Salir</button>
+          </div>
         </div>
       </header>
 

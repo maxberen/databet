@@ -34,6 +34,44 @@
   outline: none;
 }
 .date-picker:focus { border-color: var(--accent); }
+.date-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.date-nav button {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+.date-nav button:hover { background: var(--bg-hover); color: var(--text); }
+.date-nav .date-picker {
+  border: none;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+.logout-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.logout-btn:hover { color: var(--text); border-color: var(--text-muted); }
 
 /* Main */
 .main {

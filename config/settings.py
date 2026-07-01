@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # Zona horaria local (offset en horas respecto a UTC, ej. -4)
     timezone_offset: int = -4
 
+    # Auth
+    auth_user: str = ""
+    auth_salt: str = ""
+    auth_hash: str = ""
+    jwt_secret: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

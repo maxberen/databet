@@ -11,11 +11,12 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import func, text
+from sqlalchemy import func
 
+from api.auth import login, require_auth
 from config.database import SessionLocal
 from config.settings import settings
 from models.match import Match, Sport
@@ -40,6 +41,16 @@ app.add_middleware(
 
 
 # ---------- Schemas ----------------------------------------------------------
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
 
 class OddsRange(BaseModel):
     min: Optional[float]
@@ -90,14 +101,30 @@ def _f(v: Decimal | None) -> float | None:
 
 # ---------- Endpoints --------------------------------------------------------
 
+@app.post("/api/auth/login", response_model=TokenResponse)
+def do_login(body: LoginRequest, request: Request):
+    token = login(body.email, body.password, request.client.host)
+    return TokenResponse(access_token=token)
+
+
 @app.get("/api/matches/today", response_model=list[MatchSummary])
-def matches_today(day: Optional[str] = None):
+def matches_today(day: Optional[str] = None, _: str = Depends(require_auth)):
     """
     Partidos del día con min/max odds de todas las fuentes.
     Deduplica: por cada (partido real, source) usa solo el scrape más reciente.
     Parámetro opcional ?day=YYYY-MM-DD para consultar otra fecha.
     """
-    target = date.fromisoformat(day) if day else datetime.now(timezone.utc).date()
+    # Convertimos la fecha local pedida a un rango UTC.
+    # Ej: fecha local 2026-06-30, offset=-4 → UTC [2026-06-30 04:00, 2026-07-01 04:00)
+    if day:
+        local_day = date.fromisoformat(day)
+    else:
+        # "hoy" según la hora local configurada
+        local_now = datetime.now(timezone.utc) + _LOCAL_OFFSET
+        local_day = local_now.date()
+
+    utc_start = datetime(local_day.year, local_day.month, local_day.day) - _LOCAL_OFFSET
+    utc_end = utc_start + timedelta(days=1)
 
     db = SessionLocal()
     try:
@@ -106,7 +133,7 @@ def matches_today(day: Optional[str] = None):
             db.query(
                 func.max(Match.id).label("match_id"),
             )
-            .filter(func.date(Match.match_datetime) == target)
+            .filter(Match.match_datetime >= utc_start, Match.match_datetime < utc_end)
             .group_by(
                 Match.home_team,
                 Match.away_team,
@@ -174,7 +201,7 @@ def matches_today(day: Optional[str] = None):
 
 
 @app.get("/api/matches/{match_id}/odds", response_model=MatchDetail)
-def match_odds(match_id: int):
+def match_odds(match_id: int, _: str = Depends(require_auth)):
     """Detalle de odds por fuente para un partido. Usa el scrape más reciente por source."""
     db = SessionLocal()
     try:
