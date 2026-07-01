@@ -1,74 +1,133 @@
-# databet — Sistema de scraping de odds (Fase 1: Fundación)
+# databet
 
-Stack: **MySQL 8 · SQLAlchemy 2.0 (sync) · Alembic · httpx · Streamlit**.
+Plataforma de scraping y análisis de odds deportivas. Agrega probabilidades de múltiples fuentes para fútbol y tenis.
 
-La Fase 1 valida el modelo de datos end-to-end usando **The Odds API** (REST) como
-fuente piloto, antes de invertir en la capa anti-bot (Playwright, stealth, proxies,
-captcha) que recién hace falta para fuentes privadas en fases posteriores.
+## Stack
+
+| Capa | Tecnología |
+|---|---|
+| Scraping | Python 3.9 + httpx |
+| Base de datos | MySQL 8 + SQLAlchemy + Alembic |
+| API backend (local) | FastAPI + Uvicorn |
+| API backend (producción) | PHP sin dependencias externas |
+| Frontend | React + Vite + TanStack Query |
+
+## Fuentes de odds
+
+- **The Odds API** — REST API (key requerida, free tier 500 req/mes). Ligas europeas y sudamericanas.
+- **ApostaLA** — Kambi public API. Fútbol y tenis latinoamericano.
 
 ## Estructura
 
 ```
-config/        settings (.env), engine MySQL, cifrado de credenciales
-models/        modelos ORM (sources, source_protocols, matches, odds, scrape_sessions)
-normalizer/    raw event (The Odds API) → Match + Odds (función pura)
-agents/        BaseAgent + TheOddsApiAgent (piloto)
-admin/ui/      panel Streamlit (CRUD fuentes, ejecutar piloto, ver datos)
-scripts/       run_pilot.py (entry point CLI)
-alembic/       migraciones MySQL
-tests/         test_normalizer (sin DB) + test_models (integración MySQL)
-core/, scheduler/   placeholders para Fases 2–3 (anti-bot, Celery)
+agents/sources/     scrapers (the_odds_api.py, apostala.py)
+api/                FastAPI backend (desarrollo local)
+php-api/            API PHP para producción en cPanel
+frontend/           React + Vite SPA
+config/             settings (.env), conexión MySQL
+models/             ORM: sources, matches, odds
+scripts/            run_pilot.py, run_apostala.py
+alembic/            migraciones MySQL
 ```
 
-## Setup
+## Desarrollo local
 
-1. **Dependencias** (Poetry o pip):
-   ```bash
-   poetry install            # o: pip install -e .
-   ```
+### Requisitos
+- Python 3.11+
+- Node 18+
+- MySQL 8
 
-2. **Infra** — MySQL 8 + (más adelante) Redis. Crear la base con utf8mb4:
-   ```sql
-   CREATE DATABASE betting_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   ```
-
-3. **Entorno** — copiar `.env.example` a `.env` y completar:
-   ```bash
-   cp .env.example .env
-   # DATABASE_URL, ODDS_API_KEY (free en the-odds-api.com), FERNET_KEY
-   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-   ```
-
-4. **Migraciones**:
-   ```bash
-   alembic upgrade head
-   ```
-
-## Ejecutar
+### Setup
 
 ```bash
-# Piloto por CLI
-python -m scripts.run_pilot
+# 1. Dependencias Python
+pip install fastapi uvicorn sqlalchemy pymysql alembic pydantic pydantic-settings httpx python-jose python-dotenv
 
-# Panel admin
-streamlit run admin/ui/streamlit_app.py
+# 2. Variables de entorno
+cp .env.example .env   # completar DATABASE_URL, ODDS_API_KEY, AUTH_*, JWT_SECRET
+
+# 3. Migraciones
+alembic upgrade head
+
+# 4. Dependencias frontend
+cd frontend && npm install
 ```
 
-## Tests
+### Correr scrapers
 
 ```bash
-pytest                                   # tests del normalizer (sin DB)
+python3 -m scripts.run_pilot
+python3 -m scripts.run_apostala
+```
 
-# Integración contra MySQL (base desechable):
-TEST_DATABASE_URL=mysql+pymysql://user:pass@127.0.0.1:3306/betting_system_test pytest
+### Iniciar servidores
+
+```bash
+# Backend (puerto 8000)
+python3 -m uvicorn api.main:app --reload --port 8000
+
+# Frontend (puerto 5173)
+cd frontend && npm run dev
+```
+
+Accedé en `http://localhost:5173`
+
+## Producción (cPanel)
+
+- **URL**: https://databet.upload.com.py
+- **Backend**: `php-api/` copiado a la raíz del subdominio
+- **Frontend**: `frontend/dist/` buildado con `VITE_API_URL=https://databet.upload.com.py`
+- **Base de datos**: MySQL en el servidor — `uploadf_databet`
+- **Scrapers**: cron jobs con `python3.9`
+
+### Deploy — actualizar servidor
+
+```bash
+# En el servidor
+cd /home/uploadf/public_html/databet.upload.com.py
+git pull origin main
+cp php-api/_auth.php php-api/.htaccess php-api/login.php php-api/matches.php php-api/odds.php php-api/health.php .
+
+# En local — rebuild frontend
+echo 'VITE_API_URL=https://databet.upload.com.py' > frontend/.env.production
+node frontend/node_modules/vite/bin/vite.js build
+scp -r frontend/dist/* uploadf@databet.upload.com.py:/home/uploadf/public_html/databet.upload.com.py/
+```
+
+### Crons en producción
+
+```
+0 6 * * * cd /home/uploadf/public_html/databet.upload.com.py && python3.9 -m scripts.run_apostala >> /home/uploadf/databet_cron.log 2>&1
+0 7 * * * cd /home/uploadf/public_html/databet.upload.com.py && python3.9 -m scripts.run_pilot >> /home/uploadf/databet_cron.log 2>&1
+```
+
+## Variables de entorno (.env)
+
+```env
+DATABASE_URL=mysql+pymysql://user:pass@127.0.0.1:3306/dbname
+ODDS_API_KEY=...
+TIMEZONE_OFFSET=-4
+AUTH_USER=...
+AUTH_SALT=...
+AUTH_HASH=...
+JWT_SECRET=...
+```
+
+## Autenticación
+
+Usuario único configurado en `.env`. JWT HS256, expiración 12 horas. Rate limiting: 5 intentos fallidos → bloqueo 1 hora por IP (almacenado en tabla `rate_limits`).
+
+## Endpoints API
+
+```
+POST /api/auth/login              → JWT token
+GET  /api/matches/today?day=YYYY-MM-DD  → lista de partidos con odds agregadas
+GET  /api/matches/{id}/odds       → detalle por bookmaker
+GET  /api/health                  → health check
 ```
 
 ## Notas
 
-- **The Odds API y tenis:** el free tier garantiza soccer; el tenis puede no estar
-  disponible según el plan. El modelo soporta ambos; agregar la `sport_key` de tenis
-  en `agents/sources/the_odds_api.py:DEFAULT_SPORT_KEYS` cuando esté disponible.
-- **Credenciales** se guardan cifradas (Fernet) en `sources.credentials`, nunca en
-  plain text.
-- Fases siguientes: HumanBehaviorEngine + proxies + captcha (Fase 2), Celery + dashboard
-  (Fase 3). Las carpetas `core/` y `scheduler/` ya están reservadas.
+- Los datetimes se almacenan en UTC y se convierten al offset configurado (`TIMEZONE_OFFSET`) en cada respuesta.
+- La deduplicación usa el `MAX(id)` por `(home_team, away_team, match_datetime, source_id)` para mostrar siempre el scrape más reciente.
+- El filtro de fecha usa rango UTC equivalente a la fecha local pedida, no `DATE()` directo.
